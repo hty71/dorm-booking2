@@ -158,12 +158,15 @@ def submit():
 def admin_login():
     """後台登入"""
     if request.method == "POST":
-        area = request.form.get("area")
-        password = request.form.get("password")
+        area = request.form.get("area", "").strip()
+        password = request.form.get("password", "").strip()
         
-        if (area == "國際5樓" and password == "555") or \
-           (area == "國際3樓" and password == "333") or \
-           (password == "admin123"):
+        # 💡 動態擷取選單名稱中的數字。例如 "國際3樓" -> 篩選出 "3" -> 重複三次變成 "333"
+        floor_digits = "".join([char for char in area if char.isdigit()])
+        expected_floor_password = floor_digits * 3 if floor_digits else ""
+        
+        # 👑 只要輸入萬用密碼 'admin123'，或是該樓層對應的三碼數字密碼，即可成功通關
+        if (password == "admin123") or (expected_floor_password and password == expected_floor_password):
             session["admin_logged_in"] = True
             session["admin_area"] = area
             return redirect(url_for("admin_dashboard"))
