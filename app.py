@@ -1,5 +1,6 @@
 import os
 import csv
+import io  # 💥 這裡補上了關鍵的 io 匯入！
 from io import StringIO
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, make_response, Response
 # 🚀 引入 PostgreSQL 官方驅動
@@ -268,7 +269,7 @@ def export_csv():
 
     try:
         conn = get_db_connection()
-        cursor = conn.cursor(cursor_factory=DictCursor)
+        cursor = conn.cursor()
         
         if target_area:
             cursor.execute("""
@@ -288,27 +289,28 @@ def export_csv():
         cursor.close()
         conn.close()
 
-        # 💡 使用純粹的 StringIO 處理純文字
+        # 使用純粹的 StringIO 處理純文字
         si = StringIO()
         cw = csv.writer(si)
         cw.writerow(["管理樓層", "房號床位", "學生姓名", "負責工作", "優先時段1", "優先時段2", "優先時段3", "備註事項"])
         
         for r in records:
             cw.writerow([
-                r["area"], r["student_id"], r["name"], r["job"],
-                r["time1"], r["time2"], r["time3"], r["note"]
+                r[0], r[1], r[2], r[3],
+                r[4], r[5], r[6], r[7]
             ])
 
-        # 💥 這裡做最關鍵的修正：加上 UTF-8 BOM 頭 (\ufeff) 確保中文完美剖析不亂碼不報錯
+        # 加上 UTF-8 BOM 頭 確保試算表內的中文字完美剖析不亂碼
         csv_data = "\ufeff" + si.getvalue()
         
-        filename = f"dorm_records_{target_area}.csv" if target_area else "dorm_records_all.csv"
+        # 💡 關鍵修正：將下載檔名改為純英文（例如提取數字），徹底解決 Gunicorn 400/502 擋中文 Header 的問題！
+        floor_digits = "".join([char for char in target_area if char.isdigit()])
+        safe_filename = f"dorm_records_floor_{floor_digits}.csv" if floor_digits else "dorm_records_all.csv"
         
-        # 💥 用標準的 Response 物件返回純 CSV
         return Response(
             csv_data,
             mimetype="text/csv",
-            headers={"Content-Disposition": f"attachment; filename={filename}"}
+            headers={"Content-Disposition": f"attachment; filename={safe_filename}"}
         )
 
     except Exception as e:
