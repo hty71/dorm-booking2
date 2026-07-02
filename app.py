@@ -3,6 +3,8 @@ import csv
 import io  # 💥 這裡補上了關鍵的 io 匯入！
 from io import StringIO
 from flask import Flask, render_template, request, jsonify, session, redirect, url_for, make_response, Response
+# 💥 補上這行，用來處理時間範圍的自動加減
+from datetime import datetime, timedelta
 # 🚀 引入 PostgreSQL 官方驅動
 import psycopg2
 from psycopg2.extras import DictCursor
@@ -341,6 +343,69 @@ def add_slot():
     except psycopg2.errors.UniqueViolation:
         return jsonify({"status": "error", "message": "❌ 該時段已經存在，請勿重複新增！"})
 
+@app.route("/admin/batch_add_slots", methods=["POST"])
+def batch_add_slots():
+    """後台功能：批量自動生成並新增開放時段範圍"""
+    if not session.get("admin_logged_in"):
+        return jsonify({"status": "error", "message": "權限不足！"})
+        
+    data = request.get_json()
+    start_date_str = data.get("start_date", "").strip()  # 格式範例: "2026-07-05"
+    start_time_str = data.get("start_time", "").strip()  # 格式範例: "14:00"
+    end_time_str = data.get("end_time", "").strip()      # 格式範例: "17:00"
+    interval_mins = int(data.get("interval", 30))         # 間隔分鐘，預設 30 分鐘
+    max_limit = int(data.get("max_limit", 3))             # 每時段人數上限
+    current_admin_area = session.get("admin_area")
+
+    if not start_date_str or not start_time_str or not end_time_str:
+        return jsonify({"status": "error", "message": "❌ 請完整填寫日期與時間範圍！"})
+
+    try:
+        # 將字串轉換為 datetime 物件以便計算
+        start_dt = datetime.strptime(f"{start_date_str} {start_time_str}", "%Y-%m-%d %H:%M")
+        end_dt = datetime.strptime(f"{start_date_str} {end_time_str}", "%Y-%m-%d %H:%M")
+        
+        if start_dt >= end_dt:
+            return jsonify({"status": "error", "message": "❌ 開始時間不能晚於或等於結束時間！"})
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        curr_dt = start_dt
+        success_count = 0
+        skip_count = 0
+
+        # 用迴圈在時間範圍內不斷累加間隔分鐘數
+        while curr_dt <= end_dt:
+            # 轉換為前端顯示的精簡格式，例如 "7/5 14:00"
+            # %m/%d 去除前導零可用此邏輯，或是維持標準 "07/05 14:00"
+            formatted_time = f"{curr_dt.month}/{curr_dt.day} {curr_dt.strftime('%H:%M')}"
+            
+            try:
+                # 試圖寫入資料庫
+                cursor.execute("""
+                    INSERT INTO slots (time_str, max_limit, area) VALUES (%s, %s, %s)
+                """, (formatted_time, max_limit, current_admin_area))
+                success_count += 1
+            except psycopg2.errors.UniqueViolation:
+                # 若時段重複，先 rollback 當前單筆錯誤，並紀錄跳過次數
+                conn.rollback()
+                skip_count += 1
+                
+            curr_dt += timedelta(minutes=interval_mins)
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        msg = f"🎉 批量上架成功！共成功新增 {success_count} 個時段。"
+        if skip_count > 0:
+            msg += f"（有 {skip_count} 個重複時段已自動跳過）"
+            
+        return jsonify({"status": "success", "message": msg})
+
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"系統錯誤: {str(e)}"})
 
 @app.route("/admin/delete_slot", methods=["POST"])
 def delete_slot():

@@ -18,7 +18,7 @@
         .btn { padding: 6px 12px; border: none; border-radius: 3px; cursor: pointer; font-weight: bold; font-size: 14px; text-decoration: none; display: inline-block; }
         .btn-green { background: #28a745; color: white; }
         .btn-red { background: #dc3545; color: white; }
-        .btn-sheets { background: #27ae60; color: white; margin-left: 10px; } /* 新增：綠色 Google 試算表按鈕樣式 */
+        .btn-sheets { background: #27ae60; color: white; margin-left: 10px; } 
         label { font-weight: bold; margin-right: 5px; }
         input, select { padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
     </style>
@@ -32,8 +32,9 @@
 
 <div class="card">
     <h3>⚙️ 時段配置面板 ({{ session['admin_area'] }})</h3>
-    <div style="margin-bottom: 20px; background: #f8f9fa; padding: 15px; border-radius: 4px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
-        <label>➕ 新增開放時段：</label>
+    
+    <div style="margin-bottom: 15px; background: #f8f9fa; padding: 15px; border-radius: 4px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; border: 1px solid #e9ecef;">
+        <label>➕ 新增單一時段：</label>
         <input type="date" id="newDateInput" required>
         
         <select id="newHourInput">
@@ -51,7 +52,43 @@
         
         <label style="margin-left: 10px;">名額上限：</label>
         <input type="number" id="maxLimit" value="3" style="width: 60px;">
-        <button class="btn btn-green" onclick="addSlot()">儲存時段</button>
+        <button class="btn btn-green" onclick="addSlot()">儲存單一時段</button>
+    </div>
+
+    <div style="background: #eef7ed; border: 1px solid #c3e6cb; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+        <h4 style="margin-top: 0; margin-bottom: 10px; color: #1e5631; display: flex; align-items: center; gap: 5px;">
+            <span>🤖 智慧批量自動產生時段</span>
+        </h4>
+        <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center;">
+            <div>
+                <label>選擇日期：</label>
+                <input type="date" id="batch_date">
+            </div>
+            <div>
+                <label>開始時間：</label>
+                <input type="time" id="batch_start" value="14:00">
+            </div>
+            <div>
+                <label>結束時間：</label>
+                <input type="time" id="batch_end" value="17:00">
+            </div>
+            <div>
+                <label>間隔時間：</label>
+                <select id="batch_interval">
+                    <option value="20">20 分鐘</option>
+                    <option value="30" selected>30 分鐘</option>
+                    <option value="40">40 分鐘</option>
+                    <option value="60">60 分鐘</option>
+                </select>
+            </div>
+            <div>
+                <label>每時段上限：</label>
+                <input type="number" id="batch_limit" value="3" min="1" style="width: 50px;">
+            </div>
+            <button class="btn btn-green" onclick="submitBatchSlots()" style="background: #218838; margin-left: auto;">
+                ⚡ 一鍵批量上架
+            </button>
+        </div>
     </div>
     
     <table>
@@ -153,6 +190,47 @@
         })
         .then(res => res.json())
         .then(data => { alert(data.message); window.location.reload(); });
+    }
+
+    // 🤖 全新加入：前端處理批量新增時段的 JavaScript 函式
+    function submitBatchSlots() {
+        const start_date = document.getElementById('batch_date').value;
+        const start_time = document.getElementById('batch_start').value;
+        const end_time = document.getElementById('batch_end').value;
+        const interval = document.getElementById('batch_interval').value;
+        const max_limit = document.getElementById('batch_limit').value;
+
+        if (!start_date || !start_time || !end_time) {
+            alert('❌ 請完整填寫日期、開始時間與結束時間！');
+            return;
+        }
+
+        if (!confirm(`確定要為目前分區自動批量產生自 ${start_time} 至 ${end_time}，每 ${interval} 分鐘一個開放時段嗎？`)) {
+            return;
+        }
+
+        fetch('/admin/batch_add_slots', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                start_date: start_date,
+                start_time: start_time,
+                end_time: end_time,
+                interval: parseInt(interval, 10),
+                max_limit: parseInt(max_limit, 10)
+            })
+        })
+        .then(res => res.json())
+        .then(data => {
+            alert(data.message);
+            if (data.status === 'success') {
+                window.location.reload(); // 成功後自動重整網頁重新渲染時段清單
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('系統發生連線錯誤或後端異常！');
+        });
     }
 
     function deleteSlot(time_str) {
