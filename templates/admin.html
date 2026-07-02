@@ -15,9 +15,10 @@
         th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
         th { background-color: #f2f2f2; color: #333; font-weight: bold; }
         tr:nth-child(even) { background-color: #fafafa; }
-        .btn { padding: 6px 12px; border: none; border-radius: 3px; cursor: pointer; font-weight: bold; font-size: 14px; }
+        .btn { padding: 6px 12px; border: none; border-radius: 3px; cursor: pointer; font-weight: bold; font-size: 14px; text-decoration: none; display: inline-block; }
         .btn-green { background: #28a745; color: white; }
         .btn-red { background: #dc3545; color: white; }
+        .btn-sheets { background: #27ae60; color: white; margin-left: 10px; } /* 新增：綠色 Google 試算表按鈕樣式 */
         label { font-weight: bold; margin-right: 5px; }
         input, select { padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px; }
     </style>
@@ -90,8 +91,12 @@
 
 <div class="card">
     <h3>📋 學生預約名冊總覽 ({{ session['admin_area'] }})</h3>
-    <div style="margin-bottom: 15px;">
+    <div style="margin-bottom: 15px; display: flex; align-items: center;">
         <button class="btn btn-red" onclick="clearDatabase()" style="font-size:13px; padding: 6px 15px;">💥 清空本區所有預約紀錄</button>
+        
+        <a href="/admin/export/redirect" target="_blank" class="btn btn-sheets" style="font-size:13px; padding: 6px 15px;">
+            📊 一鍵檢視雲端 Google 試算表
+        </a>
     </div>
     
     <table>
@@ -100,7 +105,8 @@
                 <th style="width: 50px;">ID</th>
                 <th style="width: 100px;">房號床位</th>
                 <th style="width: 100px;">姓名</th>
-                <th style="width: 180px; color: #d63031;">負責打掃空間</th> <th>時段(1)</th>
+                <th style="width: 180px; color: #d63031;">負責打掃空間</th>
+                <th>時段(1)</th>
                 <th>時段(2)</th>
                 <th>時段(3)</th>
                 <th>學生備註</th>

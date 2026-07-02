@@ -1,5 +1,7 @@
 import os
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for
+import csv
+from io import StringIO
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, make_response
 # 🚀 引入 PostgreSQL 官方驅動
 import psycopg2
 from psycopg2.extras import DictCursor
@@ -232,6 +234,79 @@ def admin_dashboard():
     cursor.close()
     conn.close()
     return render_template("admin.html", slots_data=slots_data, slot_counts=slot_counts, records=records)
+
+
+@app.route("/admin/export/redirect")
+def admin_export_redirect():
+    """【功能】依據當前登入的樓長身分，直接一鍵跳轉到他專屬的 Google 試算表"""
+    if not session.get("admin_logged_in"):
+        return redirect(url_for("admin_login"))
+        
+    current_admin_area = session.get("admin_area")
+
+    # 🔗 樓層與 Google 試算表檔案網址的對照表
+    # ⚠️ 提示：請在下方把 "你的各樓層試算表連結" 替換成你實際在 Google 雲端建立的 5 個獨立檔案網址！
+    sheets_urls = {
+        "國際3樓": "https://docs.google.com/spreadsheets/d/1f4Av2caVDeo7wcC5RFooKhoe5OzLSD0PV3YTerKaQpg/edit?usp=sharing",
+        "國際5樓": "https://docs.google.com/spreadsheets/d/1oYne8tMUBT86GKVxwzevtiYJvcW7F_AxnUIN5Ancy4M/edit?usp=sharing",
+        "國際6樓": "https://docs.google.com/spreadsheets/d/1a7Vy0xrVqDUINTbeSOUweAjvILHfOZJJ_tatjNK0L78/edit?usp=sharing",
+        "國際7樓": "https://docs.google.com/spreadsheets/d/19v8gNR_l_pyHnkO4zpGp9cyJOeNkXEhSw5PI-75i6Wo/edit?usp=sharing",
+        "國際8樓": "https://docs.google.com/spreadsheets/d/19Cda8WBUhtgCFXu8GdA6B-ovPNSZimOXp5CAGmsKQ40/edit?usp=sharing",
+    }
+
+    target_url = sheets_urls.get(current_admin_area, "https://docs.google.com/spreadsheets")
+    return redirect(target_url)
+
+
+@app.route("/admin/export/csv")
+def export_csv():
+    """【隱藏 API 接口】供各樓層獨立的 Google 試算表在背景自動調用與更新資料"""
+    token = request.args.get("token", "")
+    if token != "admin123":
+        return "<h3>❌ 驗證失敗，無權限存取此資料！</h3>", 403
+
+    target_area = request.args.get("area", "").strip()
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(cursor_factory=DictCursor)
+        
+        if target_area:
+            cursor.execute("""
+                SELECT area, student_id, name, job, time1, time2, time3, note 
+                FROM records 
+                WHERE area = %s
+                ORDER BY student_id ASC
+            """, (target_area,))
+        else:
+            cursor.execute("""
+                SELECT area, student_id, name, job, time1, time2, time3, note 
+                FROM records 
+                ORDER BY area ASC, student_id ASC
+            """)
+            
+        records = cursor.fetchall()
+        cursor.close()
+        conn.close()
+
+        si = StringIO()
+        cw = csv.writer(si)
+        cw.writerow(["管理樓層", "房號床位", "學生姓名", "負責工作", "優先時段1", "優先時段2", "優先時段3", "備註事項"])
+        
+        for r in records:
+            cw.writerow([
+                r["area"], r["student_id"], r["name"], r["job"],
+                r["time1"], r["time2"], r["time3"], r["note"]
+            ])
+
+        response = make_response(si.getvalue())
+        filename = f"dorm_records_{target_area}.csv" if target_area else "dorm_records_all.csv"
+        response.headers["Content-Disposition"] = f"attachment; filename={filename}"
+        response.headers["Content-Type"] = "text/csv; charset=utf-8"
+        return response
+
+    except Exception as e:
+        return f"匯出失敗: {str(e)}", 500
 
 
 @app.route("/admin/add_slot", methods=["POST"])
