@@ -1,7 +1,7 @@
 import os
 import csv
 from io import StringIO
-from flask import Flask, render_template, request, jsonify, session, redirect, url_for, make_response
+from flask import Flask, render_template, request, jsonify, session, redirect, url_for, make_response, Response
 # 🚀 引入 PostgreSQL 官方驅動
 import psycopg2
 from psycopg2.extras import DictCursor
@@ -245,7 +245,6 @@ def admin_export_redirect():
     current_admin_area = session.get("admin_area")
 
     # 🔗 樓層與 Google 試算表檔案網址的對照表
-    # ⚠️ 提示：請在下方把 "你的各樓層試算表連結" 替換成你實際在 Google 雲端建立的 5 個獨立檔案網址！
     sheets_urls = {
         "國際3樓": "https://docs.google.com/spreadsheets/d/1f4Av2caVDeo7wcC5RFooKhoe5OzLSD0PV3YTerKaQpg/edit?usp=sharing",
         "國際5樓": "https://docs.google.com/spreadsheets/d/1oYne8tMUBT86GKVxwzevtiYJvcW7F_AxnUIN5Ancy4M/edit?usp=sharing",
@@ -289,6 +288,7 @@ def export_csv():
         cursor.close()
         conn.close()
 
+        # 💡 使用純粹的 StringIO 處理純文字
         si = StringIO()
         cw = csv.writer(si)
         cw.writerow(["管理樓層", "房號床位", "學生姓名", "負責工作", "優先時段1", "優先時段2", "優先時段3", "備註事項"])
@@ -299,11 +299,17 @@ def export_csv():
                 r["time1"], r["time2"], r["time3"], r["note"]
             ])
 
-        response = make_response(si.getvalue())
+        # 💥 這裡做最關鍵的修正：加上 UTF-8 BOM 頭 (\ufeff) 確保中文完美剖析不亂碼不報錯
+        csv_data = "\ufeff" + si.getvalue()
+        
         filename = f"dorm_records_{target_area}.csv" if target_area else "dorm_records_all.csv"
-        response.headers["Content-Disposition"] = f"attachment; filename={filename}"
-        response.headers["Content-Type"] = "text/csv; charset=utf-8"
-        return response
+        
+        # 💥 用標準的 Response 物件返回純 CSV
+        return Response(
+            csv_data,
+            mimetype="text/csv",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
 
     except Exception as e:
         return f"匯出失敗: {str(e)}", 500
